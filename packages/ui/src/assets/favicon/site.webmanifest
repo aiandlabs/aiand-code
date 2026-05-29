@@ -1,6 +1,6 @@
 {
-  "name": "OpenCode",
-  "short_name": "OpenCode",
+  "name": "aiand-code",
+  "short_name": "aiand-code",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
