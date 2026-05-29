@@ -24,10 +24,17 @@ rasterize() { # svg size out
 ICON1024="$WORK/icon-1024.png"
 rasterize "$BRAND/icon-master.svg" 1024 "$ICON1024"
 
-# wordmark bands: render square, crop centered band to the 3:1 content region
-make_band() { # svg out  (produces 1200x400 transparent wordmark)
+# wordmark aspect, read from the master viewBox ("0 0 <W> <H>")
+WM_VB=$(grep -o 'viewBox="0 0 [0-9.]* [0-9.]*"' "$BRAND/wordmark-light.svg" | head -1)
+WM_W=$(echo "$WM_VB" | awk '{print $3}')
+WM_H=$(echo "$WM_VB" | awk '{print $4+0}')
+# band height when the wordmark is fit to width in a 1200px square box
+BAND_H=$(awk "BEGIN{printf \"%d\", 1200*${WM_H}/${WM_W}+0.5}")
+
+# wordmark bands: render square, crop the centered content band (transparent)
+make_band() { # svg out
   qlmanage -t -s 1200 -o "$WORK" "$1" >/dev/null 2>&1
-  sips -c 400 1200 "$WORK/$(basename "$1").png" --out "$2" >/dev/null
+  sips -c "$BAND_H" 1200 "$WORK/$(basename "$1").png" --out "$2" >/dev/null
 }
 WL_BAND="$WORK/wordmark-light-band.png"; make_band "$BRAND/wordmark-light.svg" "$WL_BAND"
 WD_BAND="$WORK/wordmark-dark-band.png";  make_band "$BRAND/wordmark-dark.svg"  "$WD_BAND"
@@ -123,12 +130,13 @@ make_card() { # bg-hex wordmark-svg out-w out-h dest
   # (side = out-w) with the wordmark vertically centered, then crop to out-h.
   local bg="$1" wm="$2" w="$3" h="$4" dest="$5"
   local inner; inner="$(sed -e '1d' -e '$d' "$wm")" # strip outer <svg> / </svg>
-  local iw=$(( w * 60 / 100 )); local ih=$(( iw / 3 )) # wordmark 3:1, 60% width
+  local iw=$(( w * 60 / 100 ))
+  local ih; ih=$(awk "BEGIN{printf \"%d\", ${iw}*${WM_H}/${WM_W}+0.5}") # match wordmark aspect
   local ix=$(( (w - iw) / 2 )); local iy=$(( (w - ih) / 2 )) # centered in WxW square
   cat > "$WORK/card.svg" <<EOF
 <svg width="$w" height="$w" viewBox="0 0 $w $w" xmlns="http://www.w3.org/2000/svg">
 <rect width="$w" height="$w" fill="$bg"/>
-<svg x="$ix" y="$iy" width="$iw" height="$ih" viewBox="0 0 72 24">$inner</svg>
+<svg x="$ix" y="$iy" width="$iw" height="$ih" viewBox="0 0 ${WM_W} ${WM_H}">$inner</svg>
 </svg>
 EOF
   qlmanage -t -s "$w" -o "$WORK" "$WORK/card.svg" >/dev/null 2>&1
