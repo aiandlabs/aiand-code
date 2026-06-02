@@ -14,6 +14,16 @@ on:
         description: "Version to release, without the leading v (e.g. 1.0.0)"
         required: true
         type: string
+  # Reusable: auto-release.yml calls this after the nightly upstream-sync,
+  # passing the version it detected on dev. Running as a reusable workflow
+  # (rather than a fresh workflow_dispatch) avoids the GitHub rule that
+  # GITHUB_TOKEN-triggered events don't start new workflow runs.
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to release, without the leading v (e.g. 1.0.0)"
+        required: true
+        type: string
 
 concurrency: ${{ github.workflow }}-${{ inputs.version }}
 
@@ -25,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'aiandlabs/aiand-code'
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-depth: 0
       - name: Create draft release
@@ -56,7 +66,7 @@ jobs:
             os: linux
     runs-on: ${{ matrix.host }}
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           fetch-tags: true
 
