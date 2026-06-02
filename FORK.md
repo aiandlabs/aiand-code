@@ -71,7 +71,9 @@ same path.
 | File | Purpose |
 | --- | --- |
 | `.github/workflows/upstream-sync.yml` | The nightly sync workflow itself |
-| `.github/workflows/release.yml` | Our distribution pipeline (curl + GitHub Releases) |
+| `.github/workflows/release.yml` | Reusable distribution pipeline (curl + GitHub Releases) |
+| `.github/workflows/auto-release.yml` | Nightly: ships the upstream version when it bumps |
+| `.github/workflows/fork-release.yml` | Manual: ships an `-aiand.N` uplift on the current base |
 | `script/brand/generate.sh` | Brand asset generator (logos, icons, favicons) |
 | `script/brand/build-wordmark.cjs` | Wordmark SVG builder |
 | `script/brand/ico.mjs` | `.ico` / `.icns` generator |
@@ -137,12 +139,47 @@ that and stays gated off on this fork (`if: github.repository == 'anomalyco/open
 - **Binary / command:** `aiand-code` (we reserve the shorter `aiand` for a future
   umbrella CLI that can dispatch `aiand code …`).
 - **Install:** `curl -fsSL https://raw.githubusercontent.com/aiandlabs/aiand-code/dev/install | bash`
-- **Cut a release:** Actions → **release** → Run workflow → enter a version
-  (e.g. `1.0.0`). It creates a draft release, builds macOS + Linux binaries via
-  `packages/opencode/script/build.ts`, uploads the archives, then publishes.
 - **Platforms:** macOS + Linux only (no Windows). Windows users use WSL.
 
-See git history / PRs for the original implementation discussion.
+### Versioning: two change streams, one `dev`
+
+We track upstream *and* ship our own changes, so releases come in two shapes —
+both built from `dev`, both published as normal (non-prerelease) GitHub Releases:
+
+| Tag | Meaning | Cut by |
+| --- | --- | --- |
+| `v1.15.13` | Upstream's version 1.15.13 + our standing fork delta (branding, the CLI rename), no new uplift | `auto-release` (nightly, automatic) |
+| `v1.15.13-aiand.1`, `…-aiand.2` | The above **+ our N-th uplift** (a fork change shipped between upstream bumps) | `fork-release` (manual button) |
+
+The `-aiand.N` counter is **scoped to the upstream base**, so it auto-resets when
+upstream bumps (e.g. `1.15.14-aiand.1`). It is computed from existing release
+tags at build time — **no counter is stored and we never edit
+`packages/opencode/package.json`'s `version`**, which is what keeps the nightly
+upstream-sync conflict-free.
+
+Why this works without touching the install path:
+- The `install` script resolves "latest" via GitHub's `/releases/latest`, which
+  picks the most recent **non-prerelease** release by `created_at` — *not* by
+  semver precedence. So a freshly published `…-aiand.N` immediately becomes what
+  `curl | bash` serves, as long as we never pass `--prerelease`.
+- `packages/script/src/index.ts` passes `OPENCODE_VERSION` through verbatim and
+  keeps the channel `latest` for anything not starting with `0.0.0-`, so the
+  suffix doesn't flip the build into a "preview" channel. `--version` then reports
+  the exact upstream base + uplift, which is great for bug reports.
+
+### Cutting releases
+
+- **Upstream version (automatic):** nothing to do. `auto-release` runs nightly at
+  07:00 UTC (1h after `upstream-sync`), reads `dev`'s version, and ships it if no
+  release exists for that base yet.
+- **Your own uplift (manual):** merge your change to `dev` (prefer *added* files —
+  golden rule #1), then **Actions → fork-release → Run workflow**. It auto-computes
+  the next `-aiand.N` for the current base, builds macOS + Linux, and publishes.
+- **One-off explicit version:** **Actions → release → Run workflow** and type an
+  exact version. `release.yml` is the reusable pipeline both of the above call.
+
+All three create a draft release, build via `packages/opencode/script/build.ts`,
+upload the archives, then un-draft. See git history / PRs for implementation detail.
 
 ---
 

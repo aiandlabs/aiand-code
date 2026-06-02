@@ -46,11 +46,18 @@ jobs:
         run: |
           version=$(node -p "require('./packages/opencode/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "v$version" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "Release v$version already published — nothing to do."
+          esc=$(printf '%s' "$version" | sed 's/\./\\./g')
+          # Skip if this base is already released in ANY form: the plain
+          # vX.Y.Z (this workflow) or a vX.Y.Z-aiand.N uplift (fork-release).
+          # An uplift already contains everything a plain release would, so we
+          # don't cut a redundant plain release after one has shipped.
+          if gh release list --repo "${{ github.repository }}" --limit 200 \
+              --json tagName --jq '.[].tagName' \
+            | grep -qE "^v${esc}(-aiand\.[0-9]+)?$"; then
+            echo "A release for base v$version already exists — nothing to do."
             echo "should_release=false" >> "$GITHUB_OUTPUT"
           else
-            echo "No release for v$version yet — will build and ship it."
+            echo "No release for base v$version yet — will build and ship it."
             echo "should_release=true" >> "$GITHUB_OUTPUT"
           fi
 
