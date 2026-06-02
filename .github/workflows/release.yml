@@ -1,0 +1,82 @@
+name: release
+run-name: "release v${{ inputs.version }}"
+
+# Fork-owned distribution pipeline for aiand-code.
+# Ships a single channel: prebuilt binaries attached to a GitHub Release,
+# consumed by the curl `install` script. Deliberately does NOT publish to
+# npm / Docker / Homebrew / AUR / the desktop app — that is what upstream's
+# publish.yml does, and it stays gated off on this fork.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, without the leading v (e.g. 1.0.0)"
+        required: true
+        type: string
+
+concurrency: ${{ github.workflow }}-${{ inputs.version }}
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aiandlabs/aiand-code'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-depth: 0
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "v${{ inputs.version }}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v${{ inputs.version }} already exists; reusing it."
+          else
+            gh release create "v${{ inputs.version }}" \
+              --draft \
+              --target "${{ github.sha }}" \
+              --title "v${{ inputs.version }}" \
+              --generate-notes \
+              --repo "${{ github.repository }}"
+          fi
+
+  build:
+    needs: create-release
+    if: github.repository == 'aiandlabs/aiand-code'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: macos-14
+            os: darwin
+          - host: ubuntu-latest
+            os: linux
+    runs-on: ${{ matrix.host }}
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+        with:
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build and upload ${{ matrix.os }} binaries
+        run: ./packages/opencode/script/build.ts
+        env:
+          OPENCODE_VERSION: ${{ inputs.version }}
+          OPENCODE_RELEASE: "1"
+          OPENCODE_BUILD_OS: ${{ matrix.os }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  finalize:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.repository == 'aiandlabs/aiand-code'
+    steps:
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "v${{ inputs.version }}" --draft=false --repo "${{ github.repository }}"

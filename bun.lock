@@ -459,7 +459,7 @@
       "name": "opencode",
       "version": "1.15.13",
       "bin": {
-        "opencode": "./bin/opencode",
+        "aiand-code": "./bin/aiand-code",
       },
       "dependencies": {
         "@actions/core": "1.11.1",
