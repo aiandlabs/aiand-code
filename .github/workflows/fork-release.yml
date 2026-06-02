@@ -1,0 +1,62 @@
+name: fork-release
+run-name: "fork-release (aiand uplift on current upstream base)"
+
+# On-demand release for OUR own changes ("uplifts") layered on top of the
+# current upstream base — shipped without waiting for an upstream version bump.
+#
+# Versioning: <upstream-base>-aiand.<n>, e.g. 1.15.13-aiand.2. The base is read
+# from packages/opencode/package.json (which we never hand-edit, so the nightly
+# upstream-sync stays conflict-free). The .n counter is scoped to the base, so it
+# auto-resets to 1 when upstream bumps — no stored state, no manual reset.
+#
+# These tags are NOT marked prerelease, so GitHub's /releases/latest (which the
+# install script uses, picking by created_at) serves the newest one immediately.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  compute:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aiandlabs/aiand-code'
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+
+      - name: Compute next aiand uplift version
+        id: v
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          base=$(node -p "require('./packages/opencode/package.json').version")
+          esc=$(printf '%s' "$base" | sed 's/\./\\./g')
+          # Highest existing -aiand.N for this exact base (empty if none yet).
+          latest=$(gh release list --repo "${{ github.repository }}" --limit 200 \
+              --json tagName --jq '.[].tagName' \
+            | grep -E "^v${esc}-aiand\.[0-9]+$" \
+            | sed -E 's/.*-aiand\.//' \
+            | sort -n | tail -1)
+          n=$(( ${latest:-0} + 1 ))
+          version="${base}-aiand.${n}"
+          echo "Next fork-release version: $version (base $base, previous aiand.${latest:-0})"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: compute
+    if: github.repository == 'aiandlabs/aiand-code'
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.compute.outputs.version }}
+    permissions:
+      contents: write
+    secrets: inherit
