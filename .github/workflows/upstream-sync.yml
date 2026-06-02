@@ -1,0 +1,103 @@
+name: upstream-sync
+
+# Keeps this fork in sync with the original repo (anomalyco/opencode).
+#
+# Hands-off path:   upstream merges cleanly  -> opens a PR + enables auto-merge
+#                   -> existing test/typecheck CI gates it -> it lands itself.
+# Manual path:      upstream conflicts        -> opens a PR with the conflict
+#                   markers committed, labeled so you resolve it by hand.
+#
+# NOTE: PRs opened with the default GITHUB_TOKEN do NOT trigger other workflows
+# (a GitHub Actions safety rule), so required CI checks won't run and auto-merge
+# will wait forever. To get full hands-off auto-merge, create a fine-grained PAT
+# with contents:write + pull_requests:write on this repo, store it as the repo
+# secret SYNC_TOKEN, and this workflow will use it. Without it, the PR is still
+# opened correctly for a one-click manual merge.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday 06:00 UTC
+  workflow_dispatch: {} # also runnable on demand from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/anomalyco/opencode.git
+  UPSTREAM_BRANCH: dev
+  TARGET_BRANCH: dev
+  SYNC_BRANCH: chore/upstream-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch (full history)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "upstream-sync[bot]"
+          git config user.email "upstream-sync@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL" 2>/dev/null || git remote set-url upstream "$UPSTREAM_URL"
+          git fetch upstream "$UPSTREAM_BRANCH"
+
+      - name: Check whether we are behind
+        id: behind
+        run: |
+          behind=$(git rev-list --count HEAD..upstream/$UPSTREAM_BRANCH)
+          echo "count=$behind" >> "$GITHUB_OUTPUT"
+          echo "Behind upstream/$UPSTREAM_BRANCH by $behind commit(s)."
+
+      - name: Attempt merge on sync branch
+        if: steps.behind.outputs.count != '0'
+        id: merge
+        run: |
+          git checkout -B "$SYNC_BRANCH" "origin/$TARGET_BRANCH"
+          if git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+            echo "status=clean" >> "$GITHUB_OUTPUT"
+          else
+            # Commit the conflicted tree (markers included) so the branch is
+            # pushable and the PR clearly shows what needs resolving by hand.
+            git add -A
+            git commit --no-edit -m "chore: merge upstream/$UPSTREAM_BRANCH (CONFLICTS — needs manual resolution)"
+            echo "status=conflict" >> "$GITHUB_OUTPUT"
+          fi
+          git push --force-with-lease origin "$SYNC_BRANCH"
+
+      - name: Open / update pull request
+        if: steps.behind.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          STATUS: ${{ steps.merge.outputs.status }}
+          BEHIND: ${{ steps.behind.outputs.count }}
+        run: |
+          if [ "$STATUS" = "conflict" ]; then
+            title="⚠️ Upstream sync ($BEHIND commits) — CONFLICTS, manual resolution needed"
+            body=$'Automated upstream sync hit merge conflicts.\n\nThis branch contains the merge with conflict markers committed. To resolve:\n```\ngit fetch origin '"$SYNC_BRANCH"'\ngit checkout '"$SYNC_BRANCH"'\n# fix conflict markers, then:\ngit add -A && git commit && git push\n```\nCI will validate once resolved.'
+          else
+            title="⬆️ Upstream sync ($BEHIND commits)"
+            body=$'Automated upstream sync — merged `upstream/'"$UPSTREAM_BRANCH"'` cleanly.\n\nAuto-merge is enabled; this lands once required checks pass.'
+          fi
+
+          if gh pr view "$SYNC_BRANCH" --json number >/dev/null 2>&1; then
+            gh pr edit "$SYNC_BRANCH" --title "$title" --body "$body"
+          else
+            gh pr create --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" --title "$title" --body "$body"
+          fi
+
+          if [ "$STATUS" = "clean" ]; then
+            gh pr merge "$SYNC_BRANCH" --auto --merge || echo "Auto-merge not enabled on repo or token lacks rights — merge manually."
+          fi
