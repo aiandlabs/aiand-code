@@ -1,0 +1,65 @@
+name: auto-release
+
+# Hands-off releases for aiand-code.
+#
+# The nightly upstream-sync (06:00 UTC) pulls the latest upstream into `dev`,
+# including upstream's version bump in packages/opencode/package.json. An hour
+# later this workflow reads that version and, if we haven't already published a
+# release for it, builds + ships it via the reusable release pipeline.
+#
+# Net effect: our releases track upstream's 1:1, with zero manual steps. We
+# only cut a release when the version actually changed, so the ~38 upstream
+# commits/day that don't bump the version produce no release noise.
+#
+# A cron is used (not `on: push`) on purpose: when the sync PR is merged by the
+# default GITHUB_TOKEN, GitHub does NOT fire downstream `push` workflows, so a
+# push-triggered release would silently never run. A schedule always fires.
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # nightly at 07:00 UTC, ~1h after upstream-sync
+  workflow_dispatch: {} # also runnable on demand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aiandlabs/aiand-code'
+    outputs:
+      should_release: ${{ steps.decide.outputs.should_release }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: dev
+
+      - name: Decide whether to release
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./packages/opencode/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release v$version already published — nothing to do."
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "No release for v$version yet — will build and ship it."
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    needs: check
+    if: needs.check.outputs.should_release == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.check.outputs.version }}
+    permissions:
+      contents: write
+    secrets: inherit
