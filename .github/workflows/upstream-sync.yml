@@ -16,7 +16,7 @@ name: upstream-sync
 
 on:
   schedule:
-    - cron: "0 6 * * 1" # every Monday 06:00 UTC
+    - cron: "0 6 * * *" # nightly at 06:00 UTC (upstream moves ~38 commits/day)
   workflow_dispatch: {} # also runnable on demand from the Actions tab
 
 permissions:
