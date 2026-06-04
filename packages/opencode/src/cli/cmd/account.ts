@@ -15,7 +15,10 @@ const dim = (value: string) => UI.Style.TEXT_DIM + value + UI.Style.TEXT_NORMAL
 
 const activeSuffix = (isActive: boolean) => (isActive ? dim(" (active)") : "")
 
-export const defaultConsoleUrl = "https://console.opencode.ai"
+// aiand fork: default the managed account server to api.aiand.com (overridable
+// via OPENCODE_CONSOLE_URL for pointing at staging/local). Upstream value is
+// https://console.opencode.ai.
+export const defaultConsoleUrl = process.env["OPENCODE_CONSOLE_URL"] ?? "https://api.aiand.com"
 
 export const formatAccountLabel = (account: { email: string; url: string }, isActive: boolean) =>
   `${account.email} ${dim(account.url)}${activeSuffix(isActive)}`

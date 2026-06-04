@@ -2,6 +2,11 @@ import { Effect } from "effect"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
 
+// aiand fork: route the managed provider's model calls through our own gateway
+// (worker-inference) instead of OpenCode Zen. Overridable via OPENCODE_GATEWAY_URL
+// for staging/local. Upstream resolves this from models.dev (https://opencode.ai/zen/v1).
+const aiandGatewayUrl = process.env["OPENCODE_GATEWAY_URL"] ?? "https://api.aiand.com/v1"
+
 export const OpencodePlugin = PluginV2.define({
   id: PluginV2.ID.make("opencode"),
   effect: Effect.gen(function* () {
@@ -17,6 +22,9 @@ export const OpencodePlugin = PluginV2.define({
             (item.provider.enabled && item.provider.enabled.via === "account"),
         )
         evt.provider.update(item.provider.id, (provider) => {
+          // Override the OpenCode Zen baseURL with the aiand gateway. The catalog
+          // normalizer promotes request.body.baseURL into the provider's api.url.
+          provider.request.body.baseURL = aiandGatewayUrl
           if (!hasKey) provider.request.body.apiKey = "public"
         })
         if (hasKey) return

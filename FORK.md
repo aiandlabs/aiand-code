@@ -94,6 +94,14 @@ them.
 | `packages/opencode/package.json` | `bin` entry → `aiand-code` (name stays `opencode`) | Keep our `bin`; take everything else from upstream |
 | `bun.lock` | Reflects the `bin` rename | **Don't hand-merge.** Take upstream's lockfile, then run `bun install` to re-apply |
 
+**Managed backend repoint (point the managed offering at aiand infra):**
+
+| File | Our change | Merge guidance |
+| --- | --- | --- |
+| `packages/opencode/src/cli/cmd/account.ts` | `defaultConsoleUrl` → `https://api.aiand.com` (env-overridable via `OPENCODE_CONSOLE_URL`) | Keep our default + env read; take upstream changes around it. The login `[url]` arg still overrides at runtime |
+| `packages/opencode/test/cli/account.test.ts` | Asserts the aiand default URL | Mirror whatever value `account.ts` uses |
+| `packages/core/src/plugin/provider/opencode.ts` | Sets the `opencode` provider gateway baseURL → `https://api.aiand.com/v1` (env-overridable via `OPENCODE_GATEWAY_URL`); upstream resolves this from models.dev (`https://opencode.ai/zen/v1`) | Keep the one `request.body.baseURL` line + the const; take upstream changes to the rest of the plugin |
+
 **Branding (Phase 1 — artwork & display names):**
 
 | File | Our change |
