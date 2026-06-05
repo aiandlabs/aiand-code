@@ -1948,7 +1948,9 @@ export const layer = Layer.effect(
 
       const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
       if (!provider) return yield* new NoProvidersError()
-      const [model] = sort(Object.values(provider.models))
+      const ranked = sort(Object.values(provider.models))
+      const free = ranked.filter((m) => m.cost?.input === 0 && m.cost?.output === 0)
+      const [model] = [...free, ...ranked]
       if (!model) return yield* new NoModelsError({ providerID: provider.id })
       return {
         providerID: provider.id,
