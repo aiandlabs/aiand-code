@@ -101,6 +101,7 @@ them.
 | `packages/opencode/src/cli/cmd/account.ts` | `defaultConsoleUrl` → `https://api.aiand.com` (env-overridable via `OPENCODE_CONSOLE_URL`) | Keep our default + env read; take upstream changes around it. The login `[url]` arg still overrides at runtime |
 | `packages/opencode/test/cli/account.test.ts` | Asserts the aiand default URL | Mirror whatever value `account.ts` uses |
 | `packages/core/src/plugin/provider/opencode.ts` | Sets the `opencode` provider gateway baseURL → `https://api.aiand.com/v1` (env-overridable via `OPENCODE_GATEWAY_URL`); upstream resolves this from models.dev (`https://opencode.ai/zen/v1`) | Keep the one `request.body.baseURL` line + the const; take upstream changes to the rest of the plugin |
+| `packages/core/src/models-dev.ts` | Default model catalog → `https://api.aiand.com/v1` (serves `/api.json`) instead of `https://models.dev` (env-overridable via `OPENCODE_MODELS_URL`) | Keep our default string on the `source` line; take upstream changes around it |
 
 **Branding (Phase 1 — artwork & display names):**
 

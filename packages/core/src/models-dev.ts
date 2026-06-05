@@ -137,7 +137,9 @@ export const layer = Layer.effect(
       ),
     )
 
-    const source = Flag.OPENCODE_MODELS_URL || "https://models.dev"
+    // aiand fork: default the model catalog to our own (api.aiand.com/v1/api.json),
+    // so the picker shows our managed models. Overridable via OPENCODE_MODELS_URL.
+    const source = Flag.OPENCODE_MODELS_URL || "https://api.aiand.com/v1"
     const filepath = path.join(
       Global.Path.cache,
       source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
