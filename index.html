@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ai& code — an AI coding agent in your terminal</title>
+    <meta
+      name="description"
+      content="ai& code is an AI coding agent for your terminal. Install, log in, and start shipping — no API keys to manage."
+    />
+    <meta property="og:title" content="ai& code" />
+    <meta
+      property="og:description"
+      content="An AI coding agent in your terminal. Install, log in, ship."
+    />
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --panel: #141414;
+        --border: #262626;
+        --fg: #fafafa;
+        --muted: #a3a3a3;
+        --accent: #fafafa;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+      .wrap { width: 100%; max-width: 680px; margin: 0 auto; padding: 0 24px; }
+      header { padding: 28px 0; }
+      .brand { font-size: 20px; font-weight: 700; letter-spacing: -0.4px; }
+      main { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 48px 0; }
+      h1 {
+        font-size: clamp(30px, 6vw, 46px);
+        font-weight: 650;
+        letter-spacing: -1.2px;
+        line-height: 1.1;
+        margin: 0 0 16px;
+      }
+      .lead { font-size: 18px; color: var(--muted); margin: 0 0 40px; max-width: 540px; }
+      .step-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--muted);
+        margin: 28px 0 8px;
+      }
+      .cmd {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+        font-size: 14px;
+        overflow-x: auto;
+      }
+      .cmd code { white-space: pre; color: var(--fg); }
+      .cmd .prompt { color: var(--muted); user-select: none; }
+      .copy {
+        margin-left: auto;
+        flex: none;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .copy:hover { color: var(--fg); border-color: #444; }
+      .copy.copied { color: #4ade80; border-color: #4ade80; }
+      .features { display: flex; flex-wrap: wrap; gap: 20px 32px; margin-top: 44px; color: var(--muted); font-size: 14px; }
+      .features b { color: var(--fg); font-weight: 600; }
+      footer { padding: 28px 0; color: var(--muted); font-size: 13px; display: flex; gap: 20px; flex-wrap: wrap; }
+      footer a { color: var(--muted); text-decoration: none; }
+      footer a:hover { color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="brand">ai&amp; code</span></header>
+
+      <main>
+        <h1>An AI coding agent<br />in your terminal.</h1>
+        <p class="lead">
+          Install, sign in once, and start shipping. No API keys to wrangle, no
+          provider setup — pick a model and go.
+        </p>
+
+        <div class="step-label">1 · Install</div>
+        <div class="cmd">
+          <code id="c-install">curl -fsSL https://raw.githubusercontent.com/aiandlabs/aiand-code/dev/install | bash</code>
+          <button class="copy" data-target="c-install">Copy</button>
+        </div>
+
+        <div class="step-label">2 · Sign in</div>
+        <div class="cmd">
+          <span class="prompt">$</span><code id="c-login">aiand-code console login</code>
+          <button class="copy" data-target="c-login">Copy</button>
+        </div>
+
+        <div class="step-label">3 · Start</div>
+        <div class="cmd">
+          <span class="prompt">$</span><code id="c-run">aiand-code</code>
+          <button class="copy" data-target="c-run">Copy</button>
+        </div>
+
+        <div class="features">
+          <span><b>No keys.</b> Browser sign-in, that's it.</span>
+          <span><b>Curated models.</b> Top open + frontier models, one login.</span>
+          <span><b>macOS &amp; Linux.</b> Windows via WSL.</span>
+        </div>
+      </main>
+
+      <footer>
+        <a href="https://github.com/aiandlabs/aiand-code">GitHub</a>
+        <a href="https://docs.aiand.com">API Docs</a>
+        <span>© ai&amp;</span>
+      </footer>
+    </div>
+
+    <script>
+      document.querySelectorAll(".copy").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const text = document.getElementById(btn.dataset.target).textContent;
+          try {
+            await navigator.clipboard.writeText(text);
+            const old = btn.textContent;
+            btn.textContent = "Copied";
+            btn.classList.add("copied");
+            setTimeout(() => {
+              btn.textContent = old;
+              btn.classList.remove("copied");
+            }, 1500);
+          } catch (e) {}
+        });
+      });
+    </script>
+  </body>
+</html>
