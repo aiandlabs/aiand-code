@@ -2,9 +2,15 @@ name: upstream-sync
 
 # Keeps this fork in sync with the original repo (anomalyco/opencode).
 #
-# Hands-off path:   upstream merges cleanly  -> opens a PR + enables auto-merge
+# We track upstream's latest *published stable release* (the tagged `vX.Y.Z`
+# commit), NOT the `dev` tip. `dev` carries dozens of unreleased, bleeding-edge
+# commits between releases (~38/day); shipping those under a release label risks
+# breakage. By merging only the release tag, our `dev` advances in stable hops
+# and `auto-release` ships exactly what upstream blessed as a release.
+#
+# Hands-off path:   release merges cleanly   -> opens a PR + enables auto-merge
 #                   -> existing test/typecheck CI gates it -> it lands itself.
-# Manual path:      upstream conflicts        -> opens a PR with the conflict
+# Manual path:      release conflicts         -> opens a PR with the conflict
 #                   markers committed, labeled so you resolve it by hand.
 #
 # NOTE: PRs opened with the default GITHUB_TOKEN do NOT trigger other workflows
@@ -16,7 +22,7 @@ name: upstream-sync
 
 on:
   schedule:
-    - cron: "0 6 * * *" # nightly at 06:00 UTC (upstream moves ~38 commits/day)
+    - cron: "0 6 * * *" # nightly at 06:00 UTC; no-ops unless upstream cut a new release
   workflow_dispatch: {} # also runnable on demand from the Actions tab
 
 permissions:
@@ -29,7 +35,7 @@ concurrency:
 
 env:
   UPSTREAM_URL: https://github.com/anomalyco/opencode.git
-  UPSTREAM_BRANCH: dev
+  UPSTREAM_REPO: anomalyco/opencode # for `gh api` release lookup
   TARGET_BRANCH: dev
   SYNC_BRANCH: chore/upstream-sync
 
@@ -49,30 +55,49 @@ jobs:
           git config user.name "upstream-sync[bot]"
           git config user.email "upstream-sync@users.noreply.github.com"
 
-      - name: Fetch upstream
+      - name: Resolve upstream's latest stable release
+        id: rel
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's /releases/latest returns the most recent non-draft,
+          # non-prerelease release — i.e. upstream's current stable tag.
+          tag=$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq '.tag_name')
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "Could not resolve upstream's latest release tag." >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Upstream latest stable release: $tag"
+
+      - name: Fetch upstream release tag
         run: |
           git remote add upstream "$UPSTREAM_URL" 2>/dev/null || git remote set-url upstream "$UPSTREAM_URL"
-          git fetch upstream "$UPSTREAM_BRANCH"
+          git fetch --no-tags upstream "refs/tags/${{ steps.rel.outputs.tag }}:refs/tags/${{ steps.rel.outputs.tag }}"
 
       - name: Check whether we are behind
         id: behind
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
         run: |
-          behind=$(git rev-list --count HEAD..upstream/$UPSTREAM_BRANCH)
+          behind=$(git rev-list --count "HEAD..$TAG")
           echo "count=$behind" >> "$GITHUB_OUTPUT"
-          echo "Behind upstream/$UPSTREAM_BRANCH by $behind commit(s)."
+          echo "Behind release $TAG by $behind commit(s)."
 
       - name: Attempt merge on sync branch
         if: steps.behind.outputs.count != '0'
         id: merge
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
         run: |
           git checkout -B "$SYNC_BRANCH" "origin/$TARGET_BRANCH"
-          if git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+          if git merge --no-edit "$TAG"; then
             echo "status=clean" >> "$GITHUB_OUTPUT"
           else
             # Commit the conflicted tree (markers included) so the branch is
             # pushable and the PR clearly shows what needs resolving by hand.
             git add -A
-            git commit --no-edit -m "chore: merge upstream/$UPSTREAM_BRANCH (CONFLICTS — needs manual resolution)"
+            git commit --no-edit -m "chore: merge upstream release $TAG (CONFLICTS — needs manual resolution)"
             echo "status=conflict" >> "$GITHUB_OUTPUT"
           fi
           git push --force-with-lease origin "$SYNC_BRANCH"
@@ -83,13 +108,14 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN || secrets.GITHUB_TOKEN }}
           STATUS: ${{ steps.merge.outputs.status }}
           BEHIND: ${{ steps.behind.outputs.count }}
+          TAG: ${{ steps.rel.outputs.tag }}
         run: |
           if [ "$STATUS" = "conflict" ]; then
-            title="⚠️ Upstream sync ($BEHIND commits) — CONFLICTS, manual resolution needed"
-            body=$'Automated upstream sync hit merge conflicts.\n\nThis branch contains the merge with conflict markers committed. To resolve:\n```\ngit fetch origin '"$SYNC_BRANCH"'\ngit checkout '"$SYNC_BRANCH"'\n# fix conflict markers, then:\ngit add -A && git commit && git push\n```\nCI will validate once resolved.'
+            title="⚠️ Upstream release $TAG ($BEHIND commits) — CONFLICTS, manual resolution needed"
+            body=$'Automated sync to upstream release `'"$TAG"'` hit merge conflicts.\n\nThis branch contains the merge with conflict markers committed. To resolve:\n```\ngit fetch origin '"$SYNC_BRANCH"'\ngit checkout '"$SYNC_BRANCH"'\n# fix conflict markers, then:\ngit add -A && git commit && git push\n```\nCI will validate once resolved.'
           else
-            title="⬆️ Upstream sync ($BEHIND commits)"
-            body=$'Automated upstream sync — merged `upstream/'"$UPSTREAM_BRANCH"'` cleanly.\n\nAuto-merge is enabled; this lands once required checks pass.'
+            title="⬆️ Upstream release $TAG ($BEHIND commits)"
+            body=$'Automated sync — merged upstream release `'"$TAG"'` cleanly.\n\nAuto-merge is enabled; this lands once required checks pass.'
           fi
 
           if gh pr view "$SYNC_BRANCH" --json number >/dev/null 2>&1; then

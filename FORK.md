@@ -14,7 +14,17 @@ and the playbook for keeping the fork mergeable.
 
 ## How the sync works
 
-`.github/workflows/upstream-sync.yml` runs nightly (06:00 UTC) and on demand:
+We track upstream's latest **published stable release** (the tagged `vX.Y.Z`
+commit), **not** the `dev` tip. Upstream's `dev` carries dozens of unreleased,
+bleeding-edge commits between releases (~38/day) — for `v1.16.2`, `dev` was
+already **88 commits ahead** of the release commit. Shipping those under a
+release label is how bleeding-edge breakage reaches our users. By merging only
+the release tag, our `dev` advances in stable hops and `auto-release` ships
+exactly what upstream blessed.
+
+`.github/workflows/upstream-sync.yml` runs nightly (06:00 UTC) and on demand. It
+resolves upstream's `releases/latest` tag, fetches it, and merges that tag (a
+no-op on days upstream hasn't cut a new release):
 
 - **Clean merge** → opens a PR (`chore/upstream-sync`) and enables auto-merge;
   existing CI gates it and it lands itself.
