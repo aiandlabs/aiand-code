@@ -30,6 +30,16 @@ and the playbook for keeping the fork mergeable.
 Conflicts will only ever appear in the files listed below. If a sync conflicts in
 a file **not** on this list, something new diverged — add it here.
 
+> ⚠️ **Always merge sync PRs with a real merge commit — never "Squash and merge"
+> (and never rebase).** The fork's whole sync model depends on `upstream/dev`
+> staying an *ancestor* of `dev`. A squash collapses the upstream commits into one
+> new SHA that shares no ancestry with upstream, so the next nightly sync treats
+> all of them as new again and re-surfaces every conflict you already resolved
+> (and GitHub's fork banner reads "N commits behind" for the whole history).
+> Squash-merge is disabled repo-wide on `aiandlabs/aiand-code` to enforce this,
+> but if it ever resurfaces: the fix is to force-push `dev` back to the real
+> 2-parent merge commit (identical tree, zero conflicts) rather than re-merging.
+
 ---
 
 ## The golden rules
