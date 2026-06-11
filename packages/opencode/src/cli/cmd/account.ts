@@ -7,7 +7,18 @@ import { effectCmd } from "../effect-cmd"
 import * as Prompt from "../effect/prompt"
 import open from "open"
 
-const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => undefined))
+// open() with the default wait:false unrefs the child without an "error"
+// listener, so a missing opener (e.g. no xdg-open on a headless VM) emits an
+// unhandled "error" event that crashes the process mid-login.
+const openBrowser = (url: string) =>
+  Effect.promise(() =>
+    open(url).then(
+      (proc) => {
+        proc.once("error", () => {})
+      },
+      () => undefined,
+    ),
+  )
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 

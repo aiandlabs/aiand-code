@@ -103,12 +103,13 @@ them.
 | `packages/opencode/script/build.ts` | Added `BINARY` constant + `OPENCODE_BUILD_OS` filter; binary/archive named via `BINARY` | Keep the `BINARY` const and the two filter lines; take upstream changes to build internals |
 | `packages/opencode/package.json` | `bin` entry → `aiand-code` (name stays `opencode`) | Keep our `bin`; take everything else from upstream |
 | `bun.lock` | Reflects the `bin` rename | **Don't hand-merge.** Take upstream's lockfile, then run `bun install` to re-apply |
+| `packages/opencode/src/installation/index.ts` | Update check + `upgrade` repointed to our releases: `method()` detects `~/.aiand-code/bin` as curl-install; `latest()` GitHub fallback → `aiandlabs/aiand-code/releases/latest`; `upgradeCurl` fetches our `install` script (raw from `dev`). Without this the TUI pops a bogus "update available" against upstream's version, and `upgrade` would install upstream opencode | Keep our three `aiand fork:` commented blocks; take upstream changes around them |
 
 **Managed backend repoint (point the managed offering at aiand infra):**
 
 | File | Our change | Merge guidance |
 | --- | --- | --- |
-| `packages/opencode/src/cli/cmd/account.ts` | `defaultConsoleUrl` → `https://api.aiand.com` (env-overridable via `OPENCODE_CONSOLE_URL`) | Keep our default + env read; take upstream changes around it. The login `[url]` arg still overrides at runtime |
+| `packages/opencode/src/cli/cmd/account.ts` | `defaultConsoleUrl` → `https://api.aiand.com` (env-overridable via `OPENCODE_CONSOLE_URL`). Also `openBrowser` swallows the child-process `error` event — without it `console login` crashes ("Something went wrong") on headless boxes with no `xdg-open` (upstreamable bugfix) | Keep our default + env read and the `openBrowser` error handler; take upstream changes around them. The login `[url]` arg still overrides at runtime. Drop the `openBrowser` block if upstream fixes it (or `open` ≥11 handles it) |
 | `packages/opencode/test/cli/account.test.ts` | Asserts the aiand default URL | Mirror whatever value `account.ts` uses |
 | `packages/core/src/plugin/provider/opencode.ts` | Sets the `opencode` provider gateway baseURL → `https://api.aiand.com/v1` (env-overridable via `OPENCODE_GATEWAY_URL`); upstream resolves this from models.dev (`https://opencode.ai/zen/v1`) | Keep the one `request.body.baseURL` line + the const; take upstream changes to the rest of the plugin |
 | `packages/core/src/models-dev.ts` | Default model catalog → `https://api.aiand.com/v1` (serves `/api.json`) instead of `https://models.dev` (env-overridable via `OPENCODE_MODELS_URL`) | Keep our default string on the `source` line; take upstream changes around it |
