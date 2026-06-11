@@ -1,7 +1,7 @@
 import "./init-projectors"
 
 import { NodeHttpServer } from "@effect/platform-node"
-import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
+import { ConfigProvider, Context, Effect, Exit, Layer, Option, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
 import { createServer } from "node:http"
@@ -12,6 +12,7 @@ import { WebSocketTracker } from "./routes/instance/httpapi/websocket-tracker"
 import { PublicApi } from "./routes/instance/httpapi/public"
 import type { CorsOptions } from "./cors"
 import { lazy } from "@/util/lazy"
+import { Account } from "@/account/account"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -81,6 +82,21 @@ export async function listen(opts: ListenOptions): Promise<Listener> {
 
 const listenEffect: (opts: ListenOptions) => Effect.Effect<EffectListener, unknown> = Effect.fn("Server.listen")(
   function* (opts: ListenOptions) {
+    // aiand fork: export the active console account's API key before the
+    // listener starts. The v2 catalog enables the managed provider via this
+    // env var (see core/plugin/provider/opencode.ts). The v1 config also sets
+    // it, but only on instance bootstrap, which can race the first per-location
+    // catalog build — and a catalog built without the token never rebuilds.
+    // Must run before the listener layer builds: its ConfigProvider snapshots
+    // process.env, and Auth.config key resolution reads that snapshot.
+    yield* Effect.gen(function* () {
+      const account = yield* Account.Service
+      const active = yield* account.active()
+      if (Option.isNone(active)) return
+      const token = yield* account.token(active.value.id)
+      if (Option.isSome(token)) process.env["OPENCODE_CONSOLE_TOKEN"] = token.value
+    }).pipe(Effect.provide(Account.defaultLayer), Effect.ignore)
+
     const state = yield* startWithPortFallback(opts)
     const address = yield* tcpAddress(state)
     const listenerUrl = makeURL(opts.hostname, address.port)

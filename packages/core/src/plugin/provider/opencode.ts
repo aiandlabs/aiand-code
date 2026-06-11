@@ -15,8 +15,15 @@ export const OpencodePlugin = PluginV2.define({
       "catalog.transform": Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.opencode)
         if (!item) return
+        // aiand fork: `console login` exports the org API key as
+        // OPENCODE_CONSOLE_TOKEN (set from the account store during v1 config
+        // load, which also merges the remote /api/config). The v2 catalog only
+        // enables providers via credential/env, so honor that token here —
+        // the runner resolves env-enabled keys at request time.
+        const consoleToken = process.env["OPENCODE_CONSOLE_TOKEN"]
         hasKey = Boolean(
           process.env.OPENCODE_API_KEY ||
+            consoleToken ||
             item.provider.env.some((env) => process.env[env]) ||
             item.provider.request.body.apiKey ||
             (item.provider.enabled && item.provider.enabled.via === "credential"),
@@ -25,6 +32,9 @@ export const OpencodePlugin = PluginV2.define({
           // Override the OpenCode Zen baseURL with the aiand gateway. The catalog
           // normalizer promotes request.body.baseURL into the provider's api.url.
           provider.request.body.baseURL = aiandGatewayUrl
+          if (consoleToken && !provider.request.body.apiKey && !provider.enabled) {
+            provider.enabled = { via: "env", name: "OPENCODE_CONSOLE_TOKEN" }
+          }
           if (!hasKey) provider.request.body.apiKey = "public"
         })
         if (hasKey) return
