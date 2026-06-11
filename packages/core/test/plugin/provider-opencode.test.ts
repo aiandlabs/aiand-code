@@ -20,7 +20,7 @@ const locationLayer = Layer.succeed(
 
 describe("OpencodePlugin", () => {
   it.effect("uses a public key and disables paid models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -41,7 +41,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("keeps free models without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -62,7 +62,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("treats output-only cost as free without credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -103,8 +103,32 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  // aiand fork: `console login` exports the org key as OPENCODE_CONSOLE_TOKEN
+  it.effect("uses OPENCODE_CONSOLE_TOKEN (console login) as credentials", () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: "sk-test" }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        const catalog = yield* Catalog.Service
+        yield* plugin.add(OpencodePlugin)
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
+          const item = provider("opencode")
+          catalog.provider.update(item.id, () => {})
+          const paid = model("opencode", "paid", { cost: cost(1) })
+          catalog.model.update(item.id, paid.id, (draft) => {
+            draft.cost = [...paid.cost]
+          })
+        })
+        const info = yield* catalog.provider.get(ProviderV2.ID.opencode)
+        expect(info.request.body.apiKey).toBeUndefined()
+        expect(info.enabled).toEqual({ via: "env", name: "OPENCODE_CONSOLE_TOKEN" })
+        expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
+      }),
+    ),
+  )
+
   it.effect("uses configured provider env vars as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined, CUSTOM_OPENCODE_API_KEY: "secret" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -127,7 +151,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses configured apiKey as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -155,7 +179,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("uses auth-enabled providers as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
@@ -180,7 +204,7 @@ describe("OpencodePlugin", () => {
   )
 
   it.effect("ignores non-opencode providers and models", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
+    withEnv({ OPENCODE_API_KEY: undefined, OPENCODE_CONSOLE_TOKEN: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
