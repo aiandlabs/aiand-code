@@ -19,7 +19,7 @@ export const OpencodePlugin = PluginV2.define({
           process.env.OPENCODE_API_KEY ||
             item.provider.env.some((env) => process.env[env]) ||
             item.provider.request.body.apiKey ||
-            (item.provider.enabled && item.provider.enabled.via === "account"),
+            (item.provider.enabled && item.provider.enabled.via === "credential"),
         )
         evt.provider.update(item.provider.id, (provider) => {
           // Override the OpenCode Zen baseURL with the aiand gateway. The catalog
