@@ -157,7 +157,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
 
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
-        const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
+        // aiand fork: upgrade via our install script (upstream's would install opencode)
+        const response = yield* httpOk.execute(
+          HttpClientRequest.get("https://raw.githubusercontent.com/aiandlabs/aiand-code/dev/install"),
+        )
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
         const shell = yield* upgradeScriptShell()
@@ -185,6 +188,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
       }),
       method: Effect.fn("Installation.method")(function* () {
+        // aiand fork: our install script puts the binary in ~/.aiand-code/bin
+        if (process.execPath.includes(path.join(".aiand-code", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
         const exec = process.execPath.toLowerCase()
@@ -268,7 +273,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
 
         const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+          // aiand fork: version-check against our releases, not upstream's —
+          // we ship our own versions (vX.Y.Z[-aiand.N]) from aiandlabs/aiand-code
+          HttpClientRequest.get("https://api.github.com/repos/aiandlabs/aiand-code/releases/latest").pipe(
             HttpClientRequest.acceptJson,
           ),
         )
