@@ -17,13 +17,21 @@ import path from "path"
 // bun process.
 const ORIGINAL_MODELS_PATH = Flag.OPENCODE_MODELS_PATH
 const ORIGINAL_DISABLE_FETCH = Flag.OPENCODE_DISABLE_MODELS_FETCH
+// aiand fork: the cache filename is derived from the catalog source URL, and our
+// fork defaults that to api.aiand.com/v1 (-> models-<hash>.json) instead of
+// upstream's models.dev (-> models.json). These tests write to a hardcoded
+// "models.json" cache path, so pin the source to upstream's default to keep the
+// derived filename in sync.
+const ORIGINAL_MODELS_URL = Flag.OPENCODE_MODELS_URL
 beforeAll(() => {
   Flag.OPENCODE_MODELS_PATH = undefined
   Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+  Flag.OPENCODE_MODELS_URL = "https://models.dev"
 })
 afterAll(() => {
   Flag.OPENCODE_MODELS_PATH = ORIGINAL_MODELS_PATH
   Flag.OPENCODE_DISABLE_MODELS_FETCH = ORIGINAL_DISABLE_FETCH
+  Flag.OPENCODE_MODELS_URL = ORIGINAL_MODELS_URL
 })
 
 const cacheFile = path.join(Global.Path.cache, "models.json")
@@ -157,15 +165,12 @@ describe("ModelsDev Service", () => {
     Effect.gen(function* () {
       yield* writeCacheText("{")
       const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const context = yield* Layer.build(buildLayer(state))
       const result = yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           Flag.OPENCODE_DISABLE_MODELS_FETCH = false
         }),
-        () =>
-          provided(
-            state,
-            ModelsDev.Service.use((s) => s.get()),
-          ),
+        () => ModelsDev.Service.use((s) => s.get()).pipe(Effect.provide(context)),
         () =>
           Effect.sync(() => {
             Flag.OPENCODE_DISABLE_MODELS_FETCH = true
