@@ -1,10 +1,11 @@
 name: smoke
 
 # Fork-owned (aiand-code). Builds the real `aiand-code` binary and runs a tiny
-# end-to-end workload — a free-model prompt through the managed gateway
-# (api.aiand.com) using the built-in "public" key, so no secret is required.
-# This is the first-run path real users hit, so it exercises the build, the
-# binary boot, model-catalog resolution, and an actual model call together.
+# end-to-end workload — a prompt through the managed gateway (api.aiand.com).
+# With the OPENCODE_CONSOLE_TOKEN secret (a service-account org key) it runs the
+# authenticated managed path; without it (e.g. fork PRs) it falls back to the
+# free default model + "public" key. Either way it exercises the build, binary
+# boot, model-catalog resolution, and an actual model call together.
 #
 # Added file (FORK.md golden rule #1) — never conflicts with upstream sync.
 # Gates PRs into dev and re-runs on push as a backstop.
@@ -68,18 +69,27 @@ jobs:
           set -euo pipefail
           "${{ steps.bin.outputs.path }}" --version
 
-      # Real workload: a single free-model prompt with no credentials. Uses a
-      # throwaway HOME so there is no pre-existing config/auth on the runner —
-      # this is exactly the fresh first-run path (free default model, "public"
-      # key, catalog fetched from the gateway). Asserts a clean exit and that
-      # the model actually replied.
-      - name: Run a small workload (free-model prompt)
+      # Real workload: a single prompt against the managed gateway. Uses a
+      # throwaway HOME so there is no pre-existing config/auth on the runner.
+      #
+      # If OPENCODE_CONSOLE_TOKEN is present (a service-account org key, stored as
+      # a repo secret), the run authenticates as that org — the managed/paid path.
+      # When it's absent — e.g. PRs from forks, which GitHub does NOT give secrets
+      # to — the binary falls back to the free default model + "public" key, so the
+      # step still validates build + boot + a real model call instead of failing.
+      - name: Run a small workload (managed gateway)
         shell: bash
         env:
           HOME: ${{ runner.temp }}/aiand-home
+          OPENCODE_CONSOLE_TOKEN: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p "$HOME"
+          if [ -n "${OPENCODE_CONSOLE_TOKEN:-}" ]; then
+            echo "Running authenticated (OPENCODE_CONSOLE_TOKEN present)"
+          else
+            echo "Running unauthenticated (no token — free/public fallback)"
+          fi
           out="$("${{ steps.bin.outputs.path }}" run "Reply with the single word: pong" 2>&1)" || {
             echo "::error::aiand-code run exited non-zero"
             printf '%s\n' "$out"
