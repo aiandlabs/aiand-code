@@ -1,0 +1,62 @@
+name: gateway-probe
+
+# Diagnostic (manual only). Curls the managed gateway directly with the
+# OPENCODE_CONSOLE_TOKEN secret and prints the raw HTTP status + body, to tell a
+# bad/expired token (401) apart from a real gateway bug (500). The token is
+# masked by GitHub in logs; only the gateway's response is shown.
+# Safe to delete once /run is healthy.
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "model id to test"
+        default: "qwen/qwen3.6-27b"
+        required: false
+
+jobs:
+  probe:
+    if: github.repository == 'aiandlabs/aiand-code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Token presence
+        env:
+          TOKEN: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::error::OPENCODE_CONSOLE_TOKEN is empty in this context"
+            exit 1
+          fi
+          # Report shape only, never the value.
+          echo "token length: ${#TOKEN}"
+          echo "token prefix: ${TOKEN:0:3}…"
+
+      - name: Catalog (no auth, sanity)
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -m 30 -o /tmp/cat.json -w '%{http_code}' https://api.aiand.com/v1/api.json)
+          echo "GET /v1/api.json -> HTTP $code  ($(wc -c </tmp/cat.json) bytes)"
+
+      - name: Inference with token
+        env:
+          TOKEN: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -m 60 -o /tmp/resp.json -w '%{http_code}' \
+            https://api.aiand.com/v1/chat/completions \
+            -H 'content-type: application/json' \
+            -H "authorization: Bearer $TOKEN" \
+            -d "{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with the single word: pong\"}],\"max_tokens\":8}")
+          echo "POST /v1/chat/completions (model=$MODEL) -> HTTP $code"
+          echo "--- response body ---"
+          cat /tmp/resp.json; echo
+          # Surface the verdict clearly.
+          case "$code" in
+            200) echo "::notice::token + gateway OK" ;;
+            401|403) echo "::error::auth rejected ($code) — the secret is not a valid inference key" ;;
+            5*)  echo "::error::gateway server error ($code) — backend bug for this org/request" ;;
+            *)   echo "::warning::unexpected status $code" ;;
+          esac
