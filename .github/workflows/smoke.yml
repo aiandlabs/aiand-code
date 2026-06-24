@@ -4,8 +4,8 @@ name: smoke
 # end-to-end workload — a prompt through the managed gateway (api.aiand.com)
 # using the fork's free default model. Exercises the build, binary boot,
 # model-catalog resolution, and an actual model call together. Requires the
-# org key (OPENCODE_CONSOLE_TOKEN secret, fed as OPENCODE_API_KEY) — the gateway
-# has no anonymous path; fork PRs without the secret skip the workload.
+# org key (OPENCODE_API_KEY secret) — the gateway has no anonymous path; fork
+# PRs without the secret skip the workload.
 #
 # Added file (FORK.md golden rule #1) — never conflicts with upstream sync.
 # Gates PRs into dev and re-runs on push as a backstop.
@@ -73,12 +73,11 @@ jobs:
       # fork's free default model (qwen/qwen3.6-27b) end-to-end.
       #
       # Auth: the gateway has NO anonymous/free path — every model needs a valid
-      # org key. We feed the org `sk-` key (stored in the OPENCODE_CONSOLE_TOKEN
-      # secret) as OPENCODE_API_KEY, which is the env var the `run`/defaultModel
-      # path uses to enable the managed provider. (OPENCODE_CONSOLE_TOKEN alone
-      # only enables the v2 catalog, not the v1 `run` path, without a real
-      # `console login`.) PRs from forks get no secret, so there's nothing to
-      # test against — skip cleanly rather than fail.
+      # org key. The OPENCODE_API_KEY secret holds the org `sk-` key, which is the
+      # env var the `run`/defaultModel path uses to enable the managed provider.
+      # (A console token alone only enables the v2 catalog, not the v1 `run` path,
+      # without a real `console login`.) PRs from forks get no secret, so there's
+      # nothing to test against — skip cleanly rather than fail.
       #
       # cwd: run from a throwaway dir, NOT the repo checkout — the repo's
       # .opencode/opencode.jsonc sets "provider": {}, which makes defaultModel
@@ -100,7 +99,7 @@ jobs:
         shell: bash
         env:
           HOME: ${{ runner.temp }}/aiand-home
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           MODEL: opencode/deepseek-ai/deepseek-v4-flash
         run: |
           set -euo pipefail
