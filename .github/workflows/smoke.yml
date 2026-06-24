@@ -1,0 +1,92 @@
+name: smoke
+
+# Fork-owned (aiand-code). Builds the real `aiand-code` binary and runs a tiny
+# end-to-end workload — a free-model prompt through the managed gateway
+# (api.aiand.com) using the built-in "public" key, so no secret is required.
+# This is the first-run path real users hit, so it exercises the build, the
+# binary boot, model-catalog resolution, and an actual model call together.
+#
+# Added file (FORK.md golden rule #1) — never conflicts with upstream sync.
+# Gates PRs into dev and re-runs on push as a backstop.
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev]
+  workflow_dispatch: {}
+
+concurrency:
+  group: smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # Only meaningful on the fork (the managed gateway + branding live here).
+    if: github.repository == 'aiandlabs/aiand-code'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: ubuntu-latest
+            os: linux
+          - host: macos-14
+            os: darwin
+    runs-on: ${{ matrix.host }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+
+      # --single  : build only this runner's native target (fast; one binary).
+      # --skip-embed-web-ui : the `run` command is headless and never serves the
+      #             web UI, so skip the (slow) app build. build.ts also runs its
+      #             own `--version` smoke for the freshly built binary.
+      - name: Build aiand-code binary
+        run: ./packages/opencode/script/build.ts --single --skip-embed-web-ui
+        env:
+          OPENCODE_BUILD_OS: ${{ matrix.os }}
+
+      - name: Locate the built binary
+        id: bin
+        shell: bash
+        run: |
+          set -euo pipefail
+          path="$(find packages/opencode/dist -type f -name aiand-code | head -n1)"
+          if [ -z "$path" ]; then
+            echo "::error::aiand-code binary not found under packages/opencode/dist"
+            find packages/opencode/dist -maxdepth 3 -type d || true
+            exit 1
+          fi
+          echo "path=$PWD/$path" >> "$GITHUB_OUTPUT"
+          echo "Built: $PWD/$path"
+
+      - name: Boot check (--version)
+        shell: bash
+        run: |
+          set -euo pipefail
+          "${{ steps.bin.outputs.path }}" --version
+
+      # Real workload: a single free-model prompt with no credentials. Uses a
+      # throwaway HOME so there is no pre-existing config/auth on the runner —
+      # this is exactly the fresh first-run path (free default model, "public"
+      # key, catalog fetched from the gateway). Asserts a clean exit and that
+      # the model actually replied.
+      - name: Run a small workload (free-model prompt)
+        shell: bash
+        env:
+          HOME: ${{ runner.temp }}/aiand-home
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME"
+          out="$("${{ steps.bin.outputs.path }}" run "Reply with the single word: pong" 2>&1)" || {
+            echo "::error::aiand-code run exited non-zero"
+            printf '%s\n' "$out"
+            exit 1
+          }
+          printf '%s\n' "$out"
+          if [ -z "${out// /}" ]; then
+            echo "::error::aiand-code run produced no output"
+            exit 1
+          fi
