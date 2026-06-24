@@ -89,7 +89,14 @@ jobs:
       # sometimes unentitled ("Invalid API key"), which would make this flaky.
       # deepseek-v4-flash is cheap and reliable. Update MODEL if it leaves the
       # catalog (GET https://api.aiand.com/v1/api.json lists current models).
+      #
+      # NON-BLOCKING for now: build + boot above are the hard gates. The managed
+      # catalog is still volatile (models churn; the full agent request fails
+      # intermittently even when the raw /chat/completions returns 200), so the
+      # workload runs as an informational signal. Remove continue-on-error once
+      # the backend is stable enough to gate on.
       - name: Run a small workload (managed gateway)
+        continue-on-error: true
         shell: bash
         env:
           HOME: ${{ runner.temp }}/aiand-home
