@@ -1,11 +1,11 @@
 name: smoke
 
 # Fork-owned (aiand-code). Builds the real `aiand-code` binary and runs a tiny
-# end-to-end workload — a prompt through the managed gateway (api.aiand.com).
-# With the OPENCODE_CONSOLE_TOKEN secret (a service-account org key) it runs the
-# authenticated managed path; without it (e.g. fork PRs) it falls back to the
-# free default model + "public" key. Either way it exercises the build, binary
-# boot, model-catalog resolution, and an actual model call together.
+# end-to-end workload — a prompt through the managed gateway (api.aiand.com)
+# using the fork's free default model. Exercises the build, binary boot,
+# model-catalog resolution, and an actual model call together. Requires the
+# org key (OPENCODE_CONSOLE_TOKEN secret, fed as OPENCODE_API_KEY) — the gateway
+# has no anonymous path; fork PRs without the secret skip the workload.
 #
 # Added file (FORK.md golden rule #1) — never conflicts with upstream sync.
 # Gates PRs into dev and re-runs on push as a backstop.
@@ -69,33 +69,34 @@ jobs:
           set -euo pipefail
           "${{ steps.bin.outputs.path }}" --version
 
-      # Real workload: a single prompt against the managed gateway. Uses a
-      # throwaway HOME so there is no pre-existing config/auth on the runner.
+      # Real workload: one prompt against the managed gateway, exercising the
+      # fork's free default model (qwen/qwen3.6-27b) end-to-end.
       #
-      # If OPENCODE_CONSOLE_TOKEN is present (a service-account org key, stored as
-      # a repo secret), the run authenticates as that org — the managed/paid path.
-      # When it's absent — e.g. PRs from forks, which GitHub does NOT give secrets
-      # to — the binary falls back to the free default model + "public" key, so the
-      # step still validates build + boot + a real model call instead of failing.
-      # TEMPORARY: the managed gateway currently 500s on /run (tracked
-      # separately). Keep the build + boot checks above as hard gates, but don't
-      # let the workload failure fail the run until the gateway is healthy.
-      # Remove continue-on-error once /run works end-to-end.
+      # Auth: the gateway has NO anonymous/free path — every model needs a valid
+      # org key. We feed the org `sk-` key (stored in the OPENCODE_CONSOLE_TOKEN
+      # secret) as OPENCODE_API_KEY, which is the env var the `run`/defaultModel
+      # path uses to enable the managed provider. (OPENCODE_CONSOLE_TOKEN alone
+      # only enables the v2 catalog, not the v1 `run` path, without a real
+      # `console login`.) PRs from forks get no secret, so there's nothing to
+      # test against — skip cleanly rather than fail.
+      #
+      # cwd: run from a throwaway dir, NOT the repo checkout — the repo's
+      # .opencode/opencode.jsonc sets "provider": {}, which makes defaultModel
+      # raise NoProvidersError. A clean dir + throwaway HOME = a fresh first run.
       - name: Run a small workload (managed gateway)
-        continue-on-error: true
         shell: bash
         env:
           HOME: ${{ runner.temp }}/aiand-home
-          OPENCODE_CONSOLE_TOKEN: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p "$HOME"
-          if [ -n "${OPENCODE_CONSOLE_TOKEN:-}" ]; then
-            echo "Running authenticated (OPENCODE_CONSOLE_TOKEN present)"
-          else
-            echo "Running unauthenticated (no token — free/public fallback)"
+          if [ -z "${OPENCODE_API_KEY:-}" ]; then
+            echo "No org key available (fork PR?) — the gateway has no anonymous path, skipping workload."
+            exit 0
           fi
-          out="$("${{ steps.bin.outputs.path }}" run "Reply with the single word: pong" 2>&1)" || {
+          work="${RUNNER_TEMP}/aiand-work"
+          mkdir -p "$HOME" "$work"
+          out="$(cd "$work" && "${{ steps.bin.outputs.path }}" run "Reply with the single word: pong" 2>&1)" || {
             echo "::error::aiand-code run exited non-zero"
             printf '%s\n' "$out"
             exit 1
