@@ -83,11 +83,18 @@ jobs:
       # cwd: run from a throwaway dir, NOT the repo checkout — the repo's
       # .opencode/opencode.jsonc sets "provider": {}, which makes defaultModel
       # raise NoProvidersError. A clean dir + throwaway HOME = a fresh first run.
+      #
+      # model: pin an explicit one rather than the free default. The managed
+      # catalog is volatile and the auto-picked free model varies per run and is
+      # sometimes unentitled ("Invalid API key"), which would make this flaky.
+      # deepseek-v4-flash is cheap and reliable. Update MODEL if it leaves the
+      # catalog (GET https://api.aiand.com/v1/api.json lists current models).
       - name: Run a small workload (managed gateway)
         shell: bash
         env:
           HOME: ${{ runner.temp }}/aiand-home
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_CONSOLE_TOKEN }}
+          MODEL: opencode/deepseek-ai/deepseek-v4-flash
         run: |
           set -euo pipefail
           if [ -z "${OPENCODE_API_KEY:-}" ]; then
@@ -96,7 +103,7 @@ jobs:
           fi
           work="${RUNNER_TEMP}/aiand-work"
           mkdir -p "$HOME" "$work"
-          out="$(cd "$work" && "${{ steps.bin.outputs.path }}" run "Reply with the single word: pong" 2>&1)" || {
+          out="$(cd "$work" && "${{ steps.bin.outputs.path }}" run --model "$MODEL" "Reply with the single word: pong" 2>&1)" || {
             echo "::error::aiand-code run exited non-zero"
             printf '%s\n' "$out"
             exit 1
