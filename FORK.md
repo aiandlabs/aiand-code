@@ -85,7 +85,8 @@ same path.
 | `.github/workflows/auto-release.yml` | Nightly: ships the upstream version when it bumps |
 | `.github/workflows/fork-release.yml` | Manual: ships an `-aiand.N` uplift on the current base |
 | `script/brand/generate.sh` | Brand asset generator (logos, icons, favicons) |
-| `script/brand/build-wordmark.cjs` | Wordmark SVG builder |
+| `script/brand/wordmark-lockup.svg` | Designer master: full "ai& code" lockup (arrow + "ai&" + pixel "code") |
+| `script/brand/build-wordmark.cjs` | Derives `wordmark-{light,dark}.svg` + the web `<Logo>` from the lockup (recolor + tighten viewBox) |
 | `script/brand/ico.mjs` | `.ico` / `.icns` generator |
 | `script/brand/.gitignore` | Ignores brand generator scratch output |
 | `FORK.md`, `CLAUDE.md` | This doc + the agent pointer to it |
